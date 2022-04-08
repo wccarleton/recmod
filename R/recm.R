@@ -70,14 +70,10 @@ recm <- function(dates,
 
     # set up variables and initialize defaults if needed
 
-    N <- dim(dates)[1]
-    nX <- dim(X)[2]
-    nparams <- nX
-    nedges <- length(t_edges)
-
-    #td <- 0.5 * mean(diff(t_edges))
-
-    #t_mids <- (t_edges + td)[-length(t_edges)]
+    N <- dim(dates)[1] # number of events/dates
+    nX <- dim(X)[2] # number of regression coefficients
+    nparams <- nX # number of model parameters excluding event times
+    nedges <- length(t_edges) # number of temporal grid edges
 
     if (is.null(startvals)){
         alert <- paste("No starting values provided ('startvals == NULL').",
@@ -136,16 +132,16 @@ recm <- function(dates,
 
     if (adapt){
         n_adapts <- floor(niter / adapt_interval)
-        acceptance <- array(dim = c(n_adapts, nparams + N))
-        scales_matrix <- array(dim = c(n_adapts, nparams + N))
+        acceptance <- array(dim = c(n_adapts, nparams))
+        scales_matrix <- array(dim = c(n_adapts, nparams))
     }
 
     proposal <- chain[1, ]
 
-    t_sample <- which(proposal[-c(1:nX)] <= t_edges[1] &
-                    proposal[-c(1:nX)] > t_edges[nedges])
+    t_sample <- which(proposal[-c(1:nparams)] <= t_edges[1] &
+                    proposal[-c(1:nparams)] > t_edges[nedges])
 
-    Y <- count_events(x = proposal[-c(1:nX)][t_sample],
+    Y <- count_events(x = proposal[-c(1:nparams)][t_sample],
                     breaks = t_edges,
                     BP = BP)
 
@@ -168,7 +164,7 @@ recm <- function(dates,
 
         if(adapt & (j %% adapt_interval == 0)){
             interval_index <- c(j - adapt_interval + 1):j
-            diffs <- apply(as.matrix(chain[interval_index, ]), 2, diff)
+            diffs <- apply(as.matrix(chain[interval_index, 1:nparams]), 2, diff)
             acceptance_rate <- 1 - colMeans(diffs == 0)
             acceptance[j / adapt_interval, ] <- acceptance_rate
             scales <- unlist(
@@ -186,7 +182,7 @@ recm <- function(dates,
         # propsal step
 
         proposal <- c(propose_reg(chain[j, 1:nX], scales[1:nX]),
-                    chain[j, -c(1:nX)])
+                    chain[j, -c(1:nparams)])
 
         pd_proposal <- posterior(dates,
                             Y,
@@ -211,12 +207,12 @@ recm <- function(dates,
 
         for (l in 1:N){
             proposal_d <- chain[j + 1, ]
-            proposal_d[nX + l] <- propose_t(t_range[l, ])
+            proposal_d[nparams + l] <- propose_t(t_range[l, ])
 
-            t_sample <- which(proposal_d[-c(1:nX)] <= t_edges[1] &
-                            proposal_d[-c(1:nX)] > t_edges[nedges])
+            t_sample <- which(proposal_d[-c(1:nparams)] <= t_edges[1] &
+                            proposal_d[-c(1:nparams)] > t_edges[nedges])
 
-            Y <- count_events(x = proposal_d[-c(1:nX)][t_sample],
+            Y <- count_events(x = proposal_d[-c(1:nparams)][t_sample],
                             breaks = t_edges,
                             BP = BP)
 
