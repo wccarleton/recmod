@@ -1,0 +1,19 @@
+Package: recm
+Title: Radiocarbon-dated Event Count Modeling
+Version: 0.0.0.9000
+Authors@R:
+    person(given = "William",
+           family = "Carleton",
+           role = c("aut", "cre"),
+           email = "ccarleton@protonmail.com",
+           comment = c(ORCID = "0000-0001-7463-8638 "))
+Description: This package is intended for regression modeling with radiocarbon-dated event count data. It contains a regression function and some associated plotting tools.
+License: MIT + file LICENSE
+Encoding: UTF-8
+LazyData: true
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.1.1
+Imports: 
+    graphics,
+    IntCal,
+    progress
