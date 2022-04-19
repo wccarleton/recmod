@@ -30,7 +30,7 @@
 #'  proposal variances.
 #' @param adapt_window A numeric vector with two elements that define the lower
 #'  and upper bounds of the target acceptance value for the MCMC. This is only
-#'  used when adapt=T. Default is [0.21, 0.25].
+#'  used when adapt = T. Default is [0.21, 0.25].
 #' @param scales A numeric vector of scales for the proposal distributions. The
 #'  order is important. Each element refers to the scale of a proposal function
 #'  for the model parameters in the following order: (b_1, b_2, ..., b_nX),
@@ -52,7 +52,15 @@
 #' @return If adapt = True, returns a named list including: the mcmc
 #'  $samples; $acceptance rates for all model parameters; and $scales found
 #'  with the adaptive algorithm. Otherwise, returns only the mcmc samples (mcmc
-#'  chains).
+#'  chains) as a matrix where each column contains samples for one of the
+#'  model's parameters. The mcmc samples matrix will be sorted such that the
+#'  first 'n' columns contain regression coefficients (in the same order as the
+#'  columns in the X argument) where 'n' is the number of covariates included;
+#'  the next 'm' columns will contain any other relevant model parameters as
+#'  specified by the model itself (for now only a simple Poisson regression is
+#'  supported and so 'm' = 0); and the remaining 'l' columns will contain
+#'  samples of 'l' event ages, where 'l' is the number of dated events included
+#'  in the 'dates' argument.
 #'
 #' @import progress stats utils IntCal
 #' @export
@@ -284,24 +292,23 @@ cal_likelihood <- function(c14_mean,
 
 #' Count sequence likelihood
 #'
-#' @param c14_mean Vector containing one or more uncalibrated radiocarbon-date
-#'  means or Fraction Modern values (should correspond to the calibration curve
-#'  provided to 'calcurve').
-#' @param c14_err Vector containing one or more uncalibrated radiocarbon-date
-#'  errors---must be the same length as c14_mean, but this is not checked
-#'  internally
-#' @param caldate Vector of dates on the same calendar as the provided
-#'  calibration curve---typically this will be a calendar year BP (where
-#'  present is 1950)
+#' @param t_sample Vector containing a sample of potential ages, one for each #'  event in the dataset.
+#' @param dates Matrix containing radiocarbon date means and errors in the
+#'  first and second columns, respectively.
 #' @param calcurve Matrix containing a calibration curve. First column should
 #'  be calibrated ages/dates; second column should contain radiocarbon years or
 #'  fraction modern values; third column should contain errors (standard
 #'  deviation).
 #'
-#' @return Vector of log-likelihoods for the provided caldate(s):
-#'  p(caldate|c14_mean, c14_err, calcurve)
+#' @return Scalar summed log-likelihood of t_sample given the uncertainties
+#'  defined by the dates and calibration curve. This log-likelihood indicates
+#'  the likelihood for the sample of ages as a group (i.e., the p(t_sample|
+#'  c14_mean, c14_err, calcurve)) and, so, correpsonds to the likelihood for
+#'  the corresponding count sequence.
 
-count_likelihood <- function(t_sample, dates, calcurve){
+count_likelihood <- function(t_sample,
+                            dates,
+                            calcurve){
     ll_vector <- cal_likelihood(dates[,1],
                             dates[,2],
                             t_sample,
@@ -312,24 +319,17 @@ count_likelihood <- function(t_sample, dates, calcurve){
 
 #' Regression model likelihood
 #'
-#' @param c14_mean Vector containing one or more uncalibrated radiocarbon-date
-#'  means or Fraction Modern values (should correspond to the calibration curve
-#'  provided to 'calcurve').
-#' @param c14_err Vector containing one or more uncalibrated radiocarbon-date
-#'  errors---must be the same length as c14_mean, but this is not checked
-#'  internally
-#' @param caldate Vector of dates on the same calendar as the provided
-#'  calibration curve---typically this will be a calendar year BP (where
-#'  present is 1950)
-#' @param calcurve Matrix containing a calibration curve. First column should
-#'  be calibrated ages/dates; second column should contain radiocarbon years or
-#'  fraction modern values; third column should contain errors (standard
-#'  deviation).
+#' @param Y Vector containing a probable count sequence.
+#' @param X Vector containing covariates, including an intercept as the first
+#'  element if desired.
+#' @param params Vector containing regression coefficients.
 #'
-#' @return Vector of log-likelihoods for the provided caldate(s):
-#'  p(caldate|c14_mean, c14_err, calcurve)
+#' @return Scalar log-likelihood of the proposed regression parameters, given Y
+#'  and X.
 
-reg_likelihood <- function(Y, X, params){
+reg_likelihood <- function(Y,
+                        X,
+                        params){
     pred <- exp(as.matrix(X) %*% params)
     loglike <- dpois(x = Y,
                     lambda = pred,
@@ -340,24 +340,15 @@ reg_likelihood <- function(Y, X, params){
 
 #' Prior probability for regression parameters
 #'
-#' @param c14_mean Vector containing one or more uncalibrated radiocarbon-date
-#'  means or Fraction Modern values (should correspond to the calibration curve
-#'  provided to 'calcurve').
-#' @param c14_err Vector containing one or more uncalibrated radiocarbon-date
-#'  errors---must be the same length as c14_mean, but this is not checked
-#'  internally
-#' @param caldate Vector of dates on the same calendar as the provided
-#'  calibration curve---typically this will be a calendar year BP (where
-#'  present is 1950)
-#' @param calcurve Matrix containing a calibration curve. First column should
-#'  be calibrated ages/dates; second column should contain radiocarbon years or
-#'  fraction modern values; third column should contain errors (standard
-#'  deviation).
+#' @param params Vector of proposed regression parameter values.
+#' @param priors Vector (Matrix) containing two elements (columns), one for the #'  prior mean(s) and the other for the standard deviation(s) of Gaussian
+#'  distribution(s)
 #'
-#' @return Vector of log-likelihoods for the provided caldate(s):
-#'  p(caldate|c14_mean, c14_err, calcurve)
+#' @return Scalar summed log-likelihood for the proposed regression parameter
+#'  values given the priors.
 
-prior <- function(params, priors = NULL){
+prior <- function(params,
+                priors = NULL){
     if(is.null(priors)){
         priors <- c(0, 1000)
     }
@@ -388,7 +379,13 @@ prior <- function(params, priors = NULL){
 #' @return Vector of log-likelihoods for the provided caldate(s):
 #'  p(caldate|c14_mean, c14_err, calcurve)
 
-posterior <- function(dates, Y, X, params, nX, priors, calcurve){
+posterior <- function(dates,
+                    Y,
+                    X,
+                    params,
+                    nX,
+                    priors,
+                    calcurve){
     post <- count_likelihood(params[-c(1:nX)], dates, calcurve) +
             reg_likelihood(Y, X, params[1:nX]) +
             prior(params[1:nX], priors)
@@ -397,24 +394,14 @@ posterior <- function(dates, Y, X, params, nX, priors, calcurve){
 
 #' Proposal function for regression parameters
 #'
-#' @param c14_mean Vector containing one or more uncalibrated radiocarbon-date
-#'  means or Fraction Modern values (should correspond to the calibration curve
-#'  provided to 'calcurve').
-#' @param c14_err Vector containing one or more uncalibrated radiocarbon-date
-#'  errors---must be the same length as c14_mean, but this is not checked
-#'  internally
-#' @param caldate Vector of dates on the same calendar as the provided
-#'  calibration curve---typically this will be a calendar year BP (where
-#'  present is 1950)
-#' @param calcurve Matrix containing a calibration curve. First column should
-#'  be calibrated ages/dates; second column should contain radiocarbon years or
-#'  fraction modern values; third column should contain errors (standard
-#'  deviation).
+#' @param Bs Vector containing the current regression coefficient value(s) used
+#'  in the MCMC.
+#' @param v scale for Gaussian proposal distribution.
 #'
-#' @return Vector of log-likelihoods for the provided caldate(s):
-#'  p(caldate|c14_mean, c14_err, calcurve)
+#' @return Vector proposed regression coefficient parameter values.
 
-propose_reg <- function(Bs, v){
+propose_reg <- function(Bs,
+                        v){
     nX <- length(Bs)
     Bs <- rnorm(nX, mean = Bs, sd = v)
     return(Bs)
@@ -422,22 +409,12 @@ propose_reg <- function(Bs, v){
 
 #' Proposal function for event times
 #'
-#' @param c14_mean Vector containing one or more uncalibrated radiocarbon-date
-#'  means or Fraction Modern values (should correspond to the calibration curve
-#'  provided to 'calcurve').
-#' @param c14_err Vector containing one or more uncalibrated radiocarbon-date
-#'  errors---must be the same length as c14_mean, but this is not checked
-#'  internally
-#' @param caldate Vector of dates on the same calendar as the provided
-#'  calibration curve---typically this will be a calendar year BP (where
-#'  present is 1950)
-#' @param calcurve Matrix containing a calibration curve. First column should
-#'  be calibrated ages/dates; second column should contain radiocarbon years or
-#'  fraction modern values; third column should contain errors (standard
-#'  deviation).
+#' @param t_range Vector containing two elements referring to the start
+#'  (t_range[1]) and end (t_range[2]) of a span of time from which to sample a
+#'  probable event age.
 #'
-#' @return Vector of log-likelihoods for the provided caldate(s):
-#'  p(caldate|c14_mean, c14_err, calcurve)
+#' @return Scalar containing a possible event time (age) from a uniform
+#'  distribution with limits defined by the t_range parameter.
 
 propose_t <- function(t_range){
     t_sample <- runif(1, t_range[1], t_range[2])
@@ -446,24 +423,23 @@ propose_t <- function(t_range){
 
 #' Adapt proposal distribution scales
 #'
-#' @param c14_mean Vector containing one or more uncalibrated radiocarbon-date
-#'  means or Fraction Modern values (should correspond to the calibration curve
-#'  provided to 'calcurve').
-#' @param c14_err Vector containing one or more uncalibrated radiocarbon-date
-#'  errors---must be the same length as c14_mean, but this is not checked
-#'  internally
-#' @param caldate Vector of dates on the same calendar as the provided
-#'  calibration curve---typically this will be a calendar year BP (where
-#'  present is 1950)
-#' @param calcurve Matrix containing a calibration curve. First column should
-#'  be calibrated ages/dates; second column should contain radiocarbon years or
-#'  fraction modern values; third column should contain errors (standard
-#'  deviation).
+#' @param acceptance_rate Vector of current acceptance rate for MCMC parameters.
+#' @param s Vector of current proposal distribution scales.
+#' @param adapt_amount Scalar indicating the factor to grow/shrink the current
+#'  scale(s) by---e.g., 0.1 (10% change) would cause a given scale to grow to #'  1.1x or to shrink to 0.9x of its previous value.
+#' @param adapt_window Vector containing two elements that together define a
+#'  target acceptance rate window for the scale adaptation algorithm. If the
+#'  current acceptance rate for a given parameter falls outside the window
+#'  (i.e., is greater/less than the first/second element of the adapt_window
+#'  vector), the relevant proposal scale is decreased/increased by
+#'  adapt_amount.
 #'
-#' @return Vector of log-likelihoods for the provided caldate(s):
-#'  p(caldate|c14_mean, c14_err, calcurve)
+#' @return Vector of adapted scales.
 
-adaptScale <- function(acceptance_rate, s, adapt_amount, adapt_window){
+adaptScale <- function(acceptance_rate,
+                    s,
+                    adapt_amount,
+                    adapt_window){
     if(acceptance_rate < adapt_window[1]){
         return(s * (1 - adapt_amount))
     }else if(acceptance_rate > adapt_window[2]){
