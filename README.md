@@ -74,28 +74,30 @@ The `recm()` function should in most cases be called the first time with `adapt 
 Unlike some other regression functions, the dependent variable is passed into `recm()` as a matrix of radiocarbon dates (simulated from above) and the covariates are passed in as the `X` matrix. The third parameter is a vector of temporal bin edges that define a temporal grid for the analysis.
 
 ``` r
-mysamples <- recm(dates,
+mysamples_adapt <- recm(dates,
                     X,
                     t_edges,
                     niter = 10000,
                     adapt = T,
                     adapt_amount = 0.1,
-                    adapt_interval = 100,
+                    adapt_interval = 50,
                     adapt_window = c(0.21, 0.25),
-                    scales = c(0.005, 0.0005))
+                    scales = c(0.1, 0.01))
 #> No starting values provided ('startvals == NULL'). Using defaults.
 #> No calibration curve provided. Using IntCal.
 #> Determining calibrated date ranges...
 #> Running MCMC...
 
-newscales = colMeans(mysamples$scales[-c(1:10),])
+burnin = 1:floor(dim(mysamples_adapt$scales)[1] * 0.25)
 
-mysamples_adapted <- recm(dates,
-                    X,
-                    t_edges,
-                    niter = 50000,
-                    adapt = F,
-                    scales = newscales)
+newscales <- colMeans(mysamples_adapt$scales[-burnin,])
+
+mysamples <- recm(dates,
+                X,
+                t_edges,
+                niter = 20000,
+                adapt = F,
+                scales = newscales)
 #> No starting values provided ('startvals == NULL'). Using defaults.
 #> No calibration curve provided. Using IntCal.
 #> Determining calibrated date ranges...
@@ -111,3 +113,11 @@ The second run of the recm function above returned only the MCMC chains as a mat
 ### Density estimate for posterior of target regression coefficient
 
 <img src="man/figures/README-plots-2-1.png" width="100%" />
+
+## Note
+
+In a practical, real-world analysis you probably won't be trying to find parameters for a model defined by a simple exponential function of time. Rather, you are likely to be interested in testing one or more hypotheses about the nature of through-time changes in the abundance of radiocarbon-dated samples (events, like settlement occupations, or burials). As a result, the `X` parameter passed to `recm()` should be a matrix containing relevant covariates---e.g., a temperature reconstruction or proxy for past precipitation levels. The first column of `X` should be a column of 1's in most cases (representing the inclusion of an intercept in the regression) followed by one column for each relevant covariate/predictor variable.
+
+Those predictor variables will need to be put onto the same temporal grid used to define the whole analysis (defined in the `recm()` function by the `t_edges` parameter). Be sure to prepare the `X` matrix accordingly. If, for instance, you wanted to test whether past temperature levels affected population sizes (using radiocarbon-dated events as a proxy for the latter), then you will have to align the temperature reconstruction onto the temporal grid defined by `t_edges`. This could be as simple as taking a running average of the temperature reconstruction and sampling it at the midpoints of the grid bins to produce a sequence of temperature averages at the appropriate temporal resolution (e.g., decadal averages, or whatever is appropriate).
+
+Of course, almost any potential covariate will have chronological and measurement uncertainties and the `recm()` function currently does not include those. Future updates will include options for representing covariate uncertainties ('errors-in-variables').

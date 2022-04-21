@@ -92,7 +92,7 @@ recm <- function(dates,
                         "Using defaults.",
                         sep = " ")
         message(alert)
-        startvals <- c(rep(0, nX), dates[,1])
+        startvals <- c(rep(0, nX), dates[, 1])
     }
 
     if (is.null(scales)){
@@ -148,6 +148,8 @@ recm <- function(dates,
         scales_matrix <- array(dim = c(n_adapts, nparams))
     }
 
+    # initial posterior density
+
     proposal <- chain[1, ]
 
     t_sample <- which(proposal[-c(1:nparams)] <= t_edges[1] &
@@ -169,6 +171,8 @@ recm <- function(dates,
 
     pb <- progress::progress_bar$new(total = niter)
 
+    # main loop
+
     for (j in 1:niter){
         pb$tick()
 
@@ -183,45 +187,43 @@ recm <- function(dates,
                                 scales,
                                 adapt_amount,
                                 adapt_window)
-            #scales <- unlist(
-            #            mapply(adaptScale,
-            #                acceptance_rate,
-            #                scales,
-            #                MoreArgs = list(
-            #                            adapt_amount = adapt_amount,
-            #                            adapt_window = adapt_window)
-            #                )
-            #            )
             scales_matrix[j / adapt_interval, ] <- scales
         }
 
-        # propsal step
+        chain[j + 1, ] <- chain[j, ]
 
-        proposal <- c(propose_reg(chain[j, 1:nX], scales[1:nX]),
-                    chain[j, -c(1:nparams)])
+        # each regression param separately
+        for (l in 1:nX){
 
-        pd_proposal <- posterior(dates,
-                            Y,
-                            X,
-                            proposal,
-                            nX,
-                            priors,
-                            calcurve)
+            # propose step
 
-        # accept step
+            proposal <- chain[j + 1, ]
+            proposal[l] <- propose_reg(chain[j + 1, l], scales[l])
 
-        accept <- exp(pd_proposal - pd_previous)
+            pd_proposal <- posterior(dates,
+                                Y,
+                                X,
+                                proposal,
+                                nX,
+                                priors,
+                                calcurve)
 
-        if (runif(1) < accept){
-            chain[j + 1, ] <- proposal
-            pd_previous <- pd_proposal
-        }else{
-            chain[j + 1, ] <- chain[j, ]
+            # accept step
+
+            accept <- exp(pd_proposal - pd_previous)
+
+            if (runif(1) < accept){
+                chain[j + 1, ] <- proposal
+                pd_previous <- pd_proposal
+            }
         }
 
-        # "gibbs step" for dates
+        # each date separately
 
         for (l in 1:N){
+
+            # propose step
+
             proposal_d <- chain[j + 1, ]
             proposal_d[nparams + l] <- propose_t(t_range[l, ])
 
@@ -239,12 +241,13 @@ recm <- function(dates,
                                     nX,
                                     priors,
                                     calcurve)
+
+            # accept step
+
             accept <- exp(pd_proposal - pd_previous)
             if(runif(1) < accept){
                 chain[j + 1, ] <- proposal_d
                 pd_previous <- pd_proposal
-            }else{
-                chain[j + 1, ] <- chain[j + 1, ]
             }
         }
     }
@@ -307,14 +310,14 @@ cal_likelihood <- function(c14_mean,
 #' @return Scalar summed log-likelihood of t_sample given the uncertainties
 #'  defined by the dates and calibration curve. This log-likelihood indicates
 #'  the likelihood for the sample of ages as a group (i.e., the p(t_sample|
-#'  c14_mean, c14_err, calcurve)) and, so, correpsonds to the likelihood for
+#'  c14_mean, c14_err, calcurve)) and, so, corresponds to the likelihood for
 #'  the corresponding count sequence.
 
 count_likelihood <- function(t_sample,
                             dates,
                             calcurve){
-    ll_vector <- cal_likelihood(dates[,1],
-                            dates[,2],
+    ll_vector <- cal_likelihood(dates[, 1],
+                            dates[, 2],
                             t_sample,
                             calcurve)
     sll <- sum(ll_vector)
@@ -448,11 +451,4 @@ adaptScale <- function(acceptance_rate,
     s <- s - (s * adapt_amount * (acceptance_rate < adapt_window[1]))
     s <- s + (s * adapt_amount * (acceptance_rate > adapt_window[2]))
     return(s)
-    #if(acceptance_rate < adapt_window[1]){
-    #    return(s * (1 - adapt_amount))
-    #}else if(acceptance_rate > adapt_window[2]){
-    #    return(s * (1 + adapt_amount))
-    #}else {
-    #    return(s)
-    #}
 }
