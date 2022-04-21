@@ -82,7 +82,7 @@ recm <- function(dates,
 
     # set up variables and initialize defaults if needed
 
-    N <- dim(dates)[1] # number of events/dates
+    N <- dim(dates)[1] # number of events (dates)
     nX <- dim(X)[2] # number of regression coefficients
     nparams <- nX # number of model parameters excluding event times
     nedges <- length(t_edges) # number of temporal grid edges
@@ -100,7 +100,7 @@ recm <- function(dates,
                         "Using defaults.",
                         sep = " ")
         message(alert)
-        scales <- rep(0.002, nX)
+        scales <- rep(0.001, nX)
     }
 
     if (is.null(calcurve)){
@@ -179,15 +179,19 @@ recm <- function(dates,
             diffs <- apply(as.matrix(chain[interval_index, 1:nparams]), 2, diff)
             acceptance_rate <- 1 - colMeans(diffs == 0)
             acceptance[j / adapt_interval, ] <- acceptance_rate
-            scales <- unlist(
-                        mapply(adaptScale,
-                            acceptance_rate,
-                            scales,
-                            MoreArgs = list(
-                                        adapt_amount = adapt_amount,
-                                        adapt_window = adapt_window)
-                            )
-                        )
+            scales <- adaptScale(acceptance_rate,
+                                scales,
+                                adapt_amount,
+                                adapt_window)
+            #scales <- unlist(
+            #            mapply(adaptScale,
+            #                acceptance_rate,
+            #                scales,
+            #                MoreArgs = list(
+            #                            adapt_amount = adapt_amount,
+            #                            adapt_window = adapt_window)
+            #                )
+            #            )
             scales_matrix[j / adapt_interval, ] <- scales
         }
 
@@ -215,7 +219,7 @@ recm <- function(dates,
             chain[j + 1, ] <- chain[j, ]
         }
 
-        # gibbs step for dates
+        # "gibbs step" for dates
 
         for (l in 1:N){
             proposal_d <- chain[j + 1, ]
@@ -426,7 +430,8 @@ propose_t <- function(t_range){
 #' @param acceptance_rate Vector of current acceptance rate for MCMC parameters.
 #' @param s Vector of current proposal distribution scales.
 #' @param adapt_amount Scalar indicating the factor to grow/shrink the current
-#'  scale(s) by---e.g., 0.1 (10% change) would cause a given scale to grow to #'  1.1x or to shrink to 0.9x of its previous value.
+#'  scale(s) by---e.g., 0.1 (10% change) would cause a given scale to grow to
+#'  1.1x or shrink to 0.9x its previous value.
 #' @param adapt_window Vector containing two elements that together define a
 #'  target acceptance rate window for the scale adaptation algorithm. If the
 #'  current acceptance rate for a given parameter falls outside the window
@@ -440,11 +445,14 @@ adaptScale <- function(acceptance_rate,
                     s,
                     adapt_amount,
                     adapt_window){
-    if(acceptance_rate < adapt_window[1]){
-        return(s * (1 - adapt_amount))
-    }else if(acceptance_rate > adapt_window[2]){
-        return(s * (1 + adapt_amount))
-    }else {
-        return(s)
-    }
+    s <- s - (s * adapt_amount * (acceptance_rate < adapt_window[1]))
+    s <- s + (s * adapt_amount * (acceptance_rate > adapt_window[2]))
+    return(s)
+    #if(acceptance_rate < adapt_window[1]){
+    #    return(s * (1 - adapt_amount))
+    #}else if(acceptance_rate > adapt_window[2]){
+    #    return(s * (1 + adapt_amount))
+    #}else {
+    #    return(s)
+    #}
 }
