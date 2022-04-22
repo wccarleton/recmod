@@ -135,7 +135,7 @@ mysamples <- recm(dates,
 #> Running MCMC...
 ```
 
-The second run returned only the MCMC chains as a matrix with the first columns containing samples for the posteriors of the regression coefficients (two in this case corresponding to the two columns of the `X` matrix). The remaining columns contain samples of the event times, which will be samples from the calibrated date distributions---these are ordered the same as the radiocarbon dates in the matrix passed as the `dates` argument. These MCMC samples can then be plotted in order to check for mixing/convergence and then used to estimate posterior distributions and perform inference.
+The second run returned only the MCMC chains as a matrix with the first columns containing samples for the posteriors of the regression coefficients (two in this case corresponding to the two columns of the `X` matrix). The remaining columns contain samples of the event times, which will be samples from the calibrated date distributions---these are ordered the same as the radiocarbon dates in the matrix passed as the `dates` argument. These MCMC samples can then be plotted in order to check for mixing/convergence and then used to estimate posterior distributions and perform inference. As the plots below show, b1 was recovered (is within the 95% credible region) by the REC model MCMC.
 
 ### MCMC Chain for target regression coefficient
 
