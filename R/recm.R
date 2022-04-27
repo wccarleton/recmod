@@ -26,7 +26,8 @@
 #' @param adapt_amount A scalar containing the ratio by which the proposal
 #'  variance is changed during the MCMC adapt step when adapt = True---e.g.,
 #'  adapt_amount = 0.1 (default) grows/shrinks the variance by 10%.
-#' @param adapt_interval (default = 100) A numeric scalar indicating the the n-#'  th mcmc iteration during which the simulation will attempt to adapt the
+#' @param adapt_interval (default = 100) A numeric scalar indicating the the n-
+#'  th mcmc iteration during which the simulation will attempt to adapt the
 #'  proposal variances.
 #' @param adapt_window A numeric vector with two elements that define the lower
 #'  and upper bounds of the target acceptance value for the MCMC. This is only
@@ -299,7 +300,8 @@ cal_likelihood <- function(c14_mean,
 
 #' Count sequence likelihood
 #'
-#' @param t_sample Vector containing a sample of potential ages, one for each #'  event in the dataset.
+#' @param t_sample Vector containing a sample of potential ages, one for each
+#'  event in the dataset.
 #' @param dates Matrix containing radiocarbon date means and errors in the
 #'  first and second columns, respectively.
 #' @param calcurve Matrix containing a calibration curve. First column should
@@ -348,7 +350,8 @@ reg_likelihood <- function(Y,
 #' Prior probability for regression parameters
 #'
 #' @param params Vector of proposed regression parameter values.
-#' @param priors Vector (Matrix) containing two elements (columns), one for the #'  prior mean(s) and the other for the standard deviation(s) of Gaussian
+#' @param priors Vector (Matrix) containing two elements (columns), one for the
+#'  prior mean(s) and the other for the standard deviation(s) of Gaussian
 #'  distribution(s)
 #'
 #' @return Scalar summed log-likelihood for the proposed regression parameter
