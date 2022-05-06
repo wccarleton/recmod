@@ -6,7 +6,7 @@
 #'
 #' @param dates Matrix containing radiocarbon date means and errors in the
 #'  first and second columns, respectively.
-#' @param X A matrix containing the covariates for the model (independent
+#' @param x A matrix containing the covariates for the model (independent
 #'  variables) including an intercept if desired. Each column should contain
 #'  one variable with the leading column being the intercept (a column of 1's).
 #' @param t_edges A vector of temporal bin edges that determine the temporal
@@ -17,7 +17,7 @@
 #'  Poisson ('pois') models are supported.
 #' @param startvals A numeric vector of starting values for the MCMC. The
 #'  leading n elements will be the starting values for the regression
-#'  parameters (coefficients associated with the columns of X) while the
+#'  parameters (coefficients associated with the columns of x) while the
 #'  remaining columns should contain initial values for the dates (in years BP
 #'  1950).
 #' @param niter Integer indicating the number of MCMC iterations.
@@ -34,16 +34,16 @@
 #'  used when adapt = T. Default is [0.21, 0.25].
 #' @param scales A numeric vector of scales for the proposal distributions. The
 #'  order is important. Each element refers to the scale of a proposal function
-#'  for the model parameters in the following order: (b_1, b_2, ..., b_nX),
-#'  where `b` refers to a regression coefficient and `nX' is the number of
-#'  columns in X. If Null, naive estimates are used.
+#'  for the model parameters in the following order: (b_1, b_2, ..., b_nx),
+#'  where `b` refers to a regression coefficient and `nx' is the number of
+#'  columns in x. If Null, naive estimates are used.
 #' @param priors A numeric vector of parameter values for the model priors---the
 #'  order is important and corresponds to order of appearance of the prior
 #'  density functions in the source code for the `prior` function. If Null,
 #'  very wide priors are used--e.g., N(0, 1000).
 #' @param BP Logical (default = True), indicating whether to assume dates
 #'  provided are in BP. If so, dates (ages) increase into the past. It is up to
-#'  the user to ensure that the X columns are oriented appropriately.
+#'  the user to ensure that the x columns are oriented appropriately.
 #' @param calcurve Matrix containing a calibration curve. First column should
 #'  be calibrated ages/dates; second column should contain radiocarbon years or
 #'  fraction modern values; third column should contain errors (standard
@@ -56,7 +56,7 @@
 #'  chains) as a matrix where each column contains samples for one of the
 #'  model's parameters. The mcmc samples matrix will be sorted such that the
 #'  first 'n' columns contain regression coefficients (in the same order as the
-#'  columns in the X argument) where 'n' is the number of covariates included;
+#'  columns in the x argument) where 'n' is the number of covariates included;
 #'  the next 'm' columns will contain any other relevant model parameters as
 #'  specified by the model itself (for now only a simple Poisson regression is
 #'  supported and so 'm' = 0); and the remaining 'l' columns will contain
@@ -66,8 +66,9 @@
 #' @import progress stats utils IntCal
 #' @export
 
-recm <- function(dates,
-                X,
+recm <- function(f,
+                data,
+                datadistr,
                 t_edges,
                 model = "pois",
                 startvals = NULL,
@@ -81,19 +82,83 @@ recm <- function(dates,
                 BP = T,
                 calcurve = NULL){
 
-    # set up variables and initialize defaults if needed
+    # check formula validity
+    formula(f)
 
-    N <- dim(dates)[1] # number of events (dates)
-    nX <- dim(X)[2] # number of regression coefficients
-    nparams <- nX # number of model parameters excluding event times
+    # get some info about the formula
+    isintercept <- attr(terms(f), "intercept")
+    vars <- all.vars(f)
+    response <- vars[1]
+    xvars <- vars[-1]
+
+    # check that formula terms are in data
+    if ( !all(vars %in% names(data)) ){
+        stop("Formula terms do not match element names in data.")
+    }
+
+    # check that data have corresponding elements in datadistr
+    if ( !length(names(data)) == length(datadistr) ){
+        stop("All data in x must have corresponding metadata in datadistr.")
+    }
+
+    # check that datadistr are supported types
+    supported_types = c("radiocarbon", "normal", "none")
+
+    if ( !all(datadistr %in% supported_types) ){
+        alert <- paste("One or more x distributions not supported. ",
+                    "Currently only supported types are: ",
+                    supported_types,
+                    sep = "")
+        stop(alert)
+    }
+
+    # set up variables and initialize defaults if needed
+    nx <- length(xvars) + isintercept # number of regression coefficients
+    nparams <- nx # number of regression parameters, could change depending on the model
     nedges <- length(t_edges) # number of temporal grid edges
+
+    nyevents <- dim(data[response])[1] # number of events (dates) in the response
+
+    anyrcarbonx <- "radiocarbon" %in% datadistr
+    if (anyrcarbonx){
+        nxevents_per_x <- get_n_xevents(x, xdistr)
+        nxevents <- sum(nxevents_per_x)
+        rcarbonvars <- termlabels[which(xdistr == "radiocarbon")]
+    }
+
+    # create a vector of parameter labels to make it easier to keep track of
+    # which columns in the MCMC chain matrix refer to which parameters
+
+    if (isintercept){
+        if (anyrcarbonx){
+            varlables <- c("int",
+                            termlabels,
+                            paste("y", 1:nyevents, sep = ""),
+                            name_events(rcarbonvars, nxevents_per_x))
+
+        }else{
+            varlabels <- c("int",
+                            termlabels,
+                            paste("y", 1:nyevents, sep = ""))
+        }
+    }else{
+        if (anyrcarbonx){
+            varlables <- c(termlabels,
+                            paste("y", 1:nyevents, sep = ""),
+                            name_events(rcarbonvars, nxevents_per_x))
+
+        }else{
+            varlabels <- c(termlabels,
+                            paste("y", 1:nyevents, sep = ""))
+        }
+    }
 
     if (is.null(startvals)){
         alert <- paste("No starting values provided ('startvals == NULL').",
                         "Using defaults.",
                         sep = " ")
         message(alert)
-        startvals <- c(rep(0, nX), dates[, 1])
+        startvals <- c(rep(0, nx), dates[, 1])
     }
 
     if (is.null(scales)){
@@ -101,7 +166,7 @@ recm <- function(dates,
                         "Using defaults.",
                         sep = " ")
         message(alert)
-        scales <- rep(0.001, nX)
+        scales <- rep(0.001, nx)
     }
 
     if (is.null(calcurve)){
@@ -112,32 +177,28 @@ recm <- function(dates,
     }
 
     # get calibrated date approximations for use with proposals
-    message("Determining calibrated date ranges...")
+    message("Determining calibrated date ranges")
 
-    if (BP){
-        curve_limits <- rev(range(calcurve[, 1]))
-    }else{
-        curve_limits <- range(calcurve[, 1])
+    message("for events in the response variable...")
+
+    t_range_y <- get_cal_range(dates, calcurve, BP)
+
+    # for the covariates, if necessary
+
+    if(rcarbonvars){
+        message("for events in the predictor variables...")
+        t_range_x <- list()
+        for (j in 1:length(rcarbonvars)){
+            t_range_x[[j]] <- get_cal_range(x[[rcarbonvars[j]]], calcurve, BP)
+        }
+        names(t_range_x) <- rcarbonvars
     }
-    cal_dates <- curve_limits[1]:curve_limits[2]
-
-    cal_matrix <- array(dim = c(length(cal_dates), N))
-
-    pb <- progress::progress_bar$new(total = N)
-    for(j in 1:N){
-        pb$tick()
-        cal_matrix[,j] <- exp(cal_likelihood(dates[j, 1],
-                                        dates[j, 2],
-                                        cal_dates,
-                                        calcurve))
-    }
-    t_range <- t(apply(cal_matrix,2,function(x){
-                                        range(cal_dates[-which(x == 0)])
-                                        }))
 
     # setup the mcmc chain container
 
-    chain <- array(dim = c(niter + 1, nparams + N))
+    chain <- array(dim = c(niter + 1, nparams + nyevents + nxevents))
+
+    colnames(chain) <- varlabels
 
     chain[1, ] <- startvals
 
@@ -156,15 +217,24 @@ recm <- function(dates,
     t_sample <- which(proposal[-c(1:nparams)] <= t_edges[1] &
                     proposal[-c(1:nparams)] > t_edges[nedges])
 
-    Y <- count_events(x = proposal[-c(1:nparams)][t_sample],
+    # parse out the y events
+
+    y <- count_events(x = proposal[-c(1:nparams)][t_sample],
                     breaks = t_edges,
                     BP = BP)
 
+    # then make a matrix with x events in separate columns
+    if ( anyrcarbonx ){
+
+    }
+
+    # x can go in here as a design matrix established by f
+
     pd_previous <- posterior(dates,
-                        Y,
-                        X,
+                        y,
+                        x,
                         proposal,
-                        nX,
+                        nx,
                         priors,
                         calcurve)
 
@@ -194,7 +264,7 @@ recm <- function(dates,
         chain[j + 1, ] <- chain[j, ]
 
         # each regression param separately
-        for (l in 1:nX){
+        for (l in 1:nx){
 
             # propose step
 
@@ -202,10 +272,10 @@ recm <- function(dates,
             proposal[l] <- propose_reg(chain[j + 1, l], scales[l])
 
             pd_proposal <- posterior(dates,
-                                Y,
-                                X,
+                                y,
+                                x,
                                 proposal,
-                                nX,
+                                nx,
                                 priors,
                                 calcurve)
 
@@ -221,7 +291,7 @@ recm <- function(dates,
 
         # each date separately
 
-        for (l in 1:N){
+        for (l in 1:nyevents){
 
             # propose step
 
@@ -231,15 +301,15 @@ recm <- function(dates,
             t_sample <- which(proposal_d[-c(1:nparams)] <= t_edges[1] &
                             proposal_d[-c(1:nparams)] > t_edges[nedges])
 
-            Y <- count_events(x = proposal_d[-c(1:nparams)][t_sample],
+            y <- count_events(x = proposal_d[-c(1:nparams)][t_sample],
                             breaks = t_edges,
                             BP = BP)
 
             pd_proposal <- posterior(dates,
-                                    Y,
-                                    X,
+                                    y,
+                                    x,
                                     proposal_d,
-                                    nX,
+                                    nx,
                                     priors,
                                     calcurve)
 
@@ -251,6 +321,7 @@ recm <- function(dates,
                 pd_previous <- pd_proposal
             }
         }
+        ### repeat above for each of the relevant x's
     }
     if (adapt){
         return(list(
@@ -328,19 +399,19 @@ count_likelihood <- function(t_sample,
 
 #' Regression model likelihood
 #'
-#' @param Y Vector containing a probable count sequence.
-#' @param X Vector containing covariates, including an intercept as the first
+#' @param y Vector containing a probable count sequence.
+#' @param x Vector containing covariates, including an intercept as the first
 #'  element if desired.
 #' @param params Vector containing regression coefficients.
 #'
 #' @return Scalar log-likelihood of the proposed regression parameters, given Y
-#'  and X.
+#'  and x.
 
-reg_likelihood <- function(Y,
-                        X,
+reg_likelihood <- function(y,
+                        x,
                         params){
-    pred <- exp(as.matrix(X) %*% params)
-    loglike <- dpois(x = Y,
+    pred <- exp(as.matrix(x) %*% params)
+    loglike <- dpois(x = y,
                     lambda = pred,
                     log = T)
     sll <- sum(loglike)
@@ -390,15 +461,15 @@ prior <- function(params,
 #'  p(caldate|c14_mean, c14_err, calcurve)
 
 posterior <- function(dates,
-                    Y,
-                    X,
+                    y,
+                    x,
                     params,
-                    nX,
+                    nx,
                     priors,
                     calcurve){
-    post <- count_likelihood(params[-c(1:nX)], dates, calcurve) +
-            reg_likelihood(Y, X, params[1:nX]) +
-            prior(params[1:nX], priors)
+    post <- count_likelihood(params[-c(1:nx)], dates, calcurve) +
+            reg_likelihood(y, x, params[1:nx]) +
+            prior(params[1:nx], priors)
     return(post)
 }
 
@@ -412,8 +483,8 @@ posterior <- function(dates,
 
 propose_reg <- function(Bs,
                         v){
-    nX <- length(Bs)
-    Bs <- rnorm(nX, mean = Bs, sd = v)
+    nx <- length(Bs)
+    Bs <- rnorm(nx, mean = Bs, sd = v)
     return(Bs)
 }
 
