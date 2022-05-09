@@ -118,7 +118,7 @@ The `recm()` function should in most cases be called the first time with `adapt 
 mysamples_adapt <- recm(dates,
                     X,
                     t_edges,
-                    niter = 2000,
+                    niter = 5000,
                     adapt = T,
                     adapt_amount = 0.1,
                     adapt_interval = 20,
@@ -136,7 +136,7 @@ After removing some burn-in, we can then take an average of the scales tried by 
 mysamples <- recm(dates,
                 X,
                 t_edges,
-                niter = 5000,
+                niter = 20000,
                 adapt = F,
                 scales = newscales)
 ```
