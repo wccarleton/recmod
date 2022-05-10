@@ -7,15 +7,15 @@ Authors@R:
            role = c("aut", "cre"),
            email = "ccarleton@protonmail.com",
            comment = c(ORCID = "0000-0001-7463-8638 "))
-Description: This package is intended for regression modeling with radiocarbon-dated event count data. It contains a regression function and some associated plotting tools.
+Description: This package is intended for regression modeling with radiocarbon-dated event count data. It contains a regression function that runs a Metropolis-Hastings MCMC.
 License: MIT + file LICENSE
 Encoding: UTF-8
 LazyData: true
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.1.1
-Imports: 
+Imports:
     graphics,
     IntCal,
     progress
-Depends: 
+Depends:
     R (>= 2.10)

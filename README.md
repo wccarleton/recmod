@@ -129,8 +129,8 @@ the climate reconstruction so that time is moving from left-to-right
 (for the grid) and top-to-bottom for the `X` matrix. Age, though, will
 be decreasing because the calendar is in years BP, so the `t_grid`
 vector will contain a series of decreasing values. If this order is
-confused (e.g., the time direction of `t_grid` and the sequence of
-values in `x` are reversed relative to one another) the regression
+confused---the time direction of `t_grid` and the sequence of
+values in `x` are reversed relative to one another---the regression
 coefficient(s) in a REC model would have the wrong sign.
 
 The other two key parameters, of course, are the regression coefficients
@@ -261,7 +261,7 @@ refer to the proposal distributions for the two regression coefficients
 in the model, b0 and b1. The scales tried by the MCMC are returned in a
 matrix (`$scales`) where the columns are ordered in a way that mirrors
 the ordering of columns in the `X` matrix—so `$scales[1]` refers to the
-intercept and `$scales[1]` refers to the climate covariate regression
+intercept and `$scales[2]` refers to the climate covariate regression
 coefficient. The same ordering occurs in the MCMC samples matrix
 (`$samples`) but that matrix also contains a column for the posterior
 samples for event times corresponding to each radiocarbon date and they
@@ -362,9 +362,15 @@ sample.
     along with posterior samples (MCMC chains) that can be used to help
     diagnose convergence problems.
 
-4.  The MCMC should be run for much longer than it was in the demo above
-    in order to obtain a good estimate for model’s posteriors. In
-    practice, tens of thousands of iterations should be used at least.
+4. The MCMC should be run for much longer than it was in the demo above
+    in order to obtain a good estimate for model's posteriors. In practice,
+    hundreds of thousands of iterations may be needed, especially for large
+    numbers of radiocarbon dates.
+
+5. At the moment, it is unclear whether the change in variables from $t$
+    calendar (calibrated) dates to $y$ counts requires a Jacobian adjustment.
+    This issue is currently being investigated and any suggestions would be
+    most welcome.
 
 # References
 
